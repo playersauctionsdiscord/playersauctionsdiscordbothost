@@ -5,7 +5,6 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  EmbedBuilder,
   ChannelType,
   PermissionFlagsBits,
 } from "discord.js";
@@ -28,6 +27,9 @@ const BASES = [
   { label: "Aquatic Base", value: "aquatic", description: "$4 or 1–2 Garamas" },
   { label: "Easter Base", value: "easter", description: "$4 or 1–2 Garamas" },
 ];
+
+// Prevent same user from opening two sab tickets simultaneously
+const openingTicket = new Set();
 
 export async function run(message) {
   const embed = await buildEmbed({
@@ -58,12 +60,20 @@ export async function run(message) {
   const collector = sent.createMessageComponentCollector({ time: 600_000 });
 
   collector.on("collect", async (interaction) => {
-    if (interaction.customId === "sabpanel_select") {
+    if (interaction.customId !== "sabpanel_select") return;
+
+    if (openingTicket.has(interaction.user.id)) {
+      await interaction.reply({ content: "⏳ Your previous request is still being processed. Please wait.", ephemeral: true });
+      return;
+    }
+    openingTicket.add(interaction.user.id);
+
+    try {
       const selectedValue = interaction.values[0];
       const selectedBase = BASES.find((b) => b.value === selectedValue);
 
       const modal = new ModalBuilder()
-        .setCustomId(`sabpanel_modal_${selectedValue}`)
+        .setCustomId(`sabpanel_modal_${interaction.id}`)
         .setTitle(`${selectedBase.label} — Indexing Request`);
 
       const indexInput = new TextInputBuilder()
@@ -95,66 +105,64 @@ export async function run(message) {
 
       await interaction.showModal(modal);
 
-      try {
-        const modalResponse = await interaction.awaitModalSubmit({ time: 300_000 });
+      const modalResponse = await interaction.awaitModalSubmit({
+        filter: (i) => i.user.id === interaction.user.id,
+        time: 300_000,
+      });
 
-        const indexProgress = modalResponse.fields.getTextInputValue("index_progress");
-        const paymentMethod = modalResponse.fields.getTextInputValue("payment_method");
-        const linkAccessibility = modalResponse.fields.getTextInputValue("link_accessibility");
+      const indexProgress = modalResponse.fields.getTextInputValue("index_progress");
+      const paymentMethod = modalResponse.fields.getTextInputValue("payment_method");
+      const linkAccessibility = modalResponse.fields.getTextInputValue("link_accessibility");
 
-        // Create private ticket channel
-        const staffRoleId = await getConfig("staff_role_id", "");
-        const guild = message.guild;
+      // Acknowledge immediately
+      await modalResponse.deferReply({ ephemeral: true });
 
-        const ticketChannel = await guild.channels.create({
-          name: `sab-${selectedValue}-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, ""),
-          type: ChannelType.GuildText,
-          permissionOverwrites: [
-            {
-              id: guild.id,
-              deny: [PermissionFlagsBits.ViewChannel],
-            },
-            {
-              id: interaction.user.id,
-              allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
-            },
-            ...(staffRoleId
-              ? [{
-                  id: staffRoleId,
-                  allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
-                }]
-              : []),
-          ],
-        });
+      const staffRoleId = await getConfig("staff_role_id", "");
+      const guild = message.guild;
 
-        const ticketEmbed = await buildEmbed({
-          title: "Indexing Service Request",
-          description:
-            `> A new indexing request has been created.\n\n` +
-            `**Requester:** <@${interaction.user.id}>\n` +
-            `**Selected Base:** \`${selectedBase.label}\` — ${selectedBase.description}\n` +
-            `**Index Progress:** \`${indexProgress}\`\n` +
-            `**Payment Method:** \`${paymentMethod}\`\n` +
-            `**Can Join Links:** \`${linkAccessibility}\`\n\n` +
-            `-# An indexer will be with you shortly.`,
-          color: 0x5865f2,
-        });
+      const ticketChannel = await guild.channels.create({
+        name: `sab-${selectedValue}-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 100),
+        type: ChannelType.GuildText,
+        permissionOverwrites: [
+          { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+          {
+            id: interaction.user.id,
+            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
+          },
+          ...(staffRoleId
+            ? [{ id: staffRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }]
+            : []),
+        ],
+      });
 
-        let pingContent = "";
-        if (staffRoleId) pingContent = `<@&${staffRoleId}>`;
+      const ticketEmbed = await buildEmbed({
+        title: "Indexing Service Request",
+        description:
+          `> A new indexing request has been created.\n\n` +
+          `**Requester:** <@${interaction.user.id}>\n` +
+          `**Selected Base:** \`${selectedBase.label}\` — ${selectedBase.description}\n` +
+          `**Index Progress:** \`${indexProgress}\`\n` +
+          `**Payment Method:** \`${paymentMethod}\`\n` +
+          `**Can Join Links:** \`${linkAccessibility}\`\n\n` +
+          `-# An indexer will be with you shortly.`,
+        color: 0x5865f2,
+      });
 
-        await ticketChannel.send({
-          content: pingContent || undefined,
-          embeds: [ticketEmbed],
-        });
+      const pingContent = staffRoleId ? `<@&${staffRoleId}>` : "";
+      await ticketChannel.send({
+        content: pingContent || undefined,
+        embeds: [ticketEmbed],
+      });
 
-        await modalResponse.reply({
-          content: `✅ Your indexing request has been created in <#${ticketChannel.id}>!`,
-          ephemeral: true,
-        });
-      } catch (err) {
-        console.error("SAB panel modal error:", err.message);
+      await modalResponse.editReply({
+        content: `✅ Your indexing request has been created in <#${ticketChannel.id}>!`,
+      });
+    } catch (err) {
+      if (!err.message?.includes("time")) {
+        console.error("SAB panel error:", err.message);
       }
+    } finally {
+      openingTicket.delete(interaction.user.id);
     }
   });
 }
