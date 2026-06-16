@@ -3,6 +3,7 @@ import { connectDB, Permission } from "./utils/db.js";
 
 import * as settitle from "./commands/settitle.js";
 import * as setbanner from "./commands/setbanner.js";
+import * as setbannerremove from "./commands/bannerremove.js";
 import * as staffrole from "./commands/staffrole.js";
 import * as close from "./commands/close.js";
 import * as mminfo from "./commands/mminfo.js";
@@ -27,6 +28,7 @@ const PREFIX = ".";
 const commands = new Map([
   ["settitle", settitle],
   ["setbanner", setbanner],
+  ["bannerremove", setbannerremove],
   ["staffrole", staffrole],
   ["close", close],
   ["mminfo", mminfo],
@@ -46,6 +48,9 @@ const commands = new Map([
   ["setfloptext", setfloptext],
   ["flopstats", flopstats],
 ]);
+
+// Prevent the same message from being processed twice (network retries / double events)
+const handledMessages = new Set();
 
 async function checkPermissions(member, commandName) {
   const record = await Permission.findOne({ commandName });
@@ -77,7 +82,7 @@ async function main() {
     partials: [Partials.Channel],
   });
 
-  client.once("ready", () => {
+  client.once("clientReady", () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
     console.log(`📦 ${commands.size} commands loaded`);
     console.log(`🎯 Prefix: ${PREFIX}`);
@@ -87,6 +92,12 @@ async function main() {
     if (message.author.bot) return;
     if (!message.content.startsWith(PREFIX)) return;
     if (!message.guild) return;
+
+    // Deduplicate — same message ID must never be processed twice
+    if (handledMessages.has(message.id)) return;
+    handledMessages.add(message.id);
+    // Clean up old IDs after 10 seconds to prevent unbounded growth
+    setTimeout(() => handledMessages.delete(message.id), 10_000);
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
     const commandName = args.shift().toLowerCase();
