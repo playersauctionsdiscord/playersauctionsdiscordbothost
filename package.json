@@ -1,0 +1,16 @@
+{
+  "name": "@workspace/discord-bot",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=../../.env src/index.js 2>/dev/null || node src/index.js",
+    "start": "node src/index.js",
+    "typecheck": "echo 'No typecheck for bot'"
+  },
+  "dependencies": {
+    "discord.js": "^14.21.0",
+    "mongoose": "^8.15.0",
+    "axios": "^1.9.0"
+  }
+}
