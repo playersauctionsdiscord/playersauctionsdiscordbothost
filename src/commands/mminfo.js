@@ -7,6 +7,9 @@ import {
 import { buildEmbed } from "../utils/embed.js";
 import { getConfig } from "../utils/db.js";
 
+// Prevent the same user from triggering two responses
+const handledUsers = new Set();
+
 export async function run(message) {
   const staffRoleId = await getConfig("staff_role_id", "");
 
@@ -48,6 +51,15 @@ export async function run(message) {
   const collector = sent.createMessageComponentCollector({ time: 300_000 });
 
   collector.on("collect", async (interaction) => {
+    // Each user only gets one response per panel
+    const userKey = `${sent.id}_${interaction.user.id}`;
+    if (handledUsers.has(userKey)) {
+      await interaction.reply({ content: "You have already responded to this panel.", ephemeral: true });
+      return;
+    }
+    handledUsers.add(userKey);
+    setTimeout(() => handledUsers.delete(userKey), 600_000);
+
     await interaction.deferUpdate();
 
     if (interaction.customId === "mminfo_yes") {
@@ -71,6 +83,13 @@ export async function run(message) {
           `<@&${staffRoleId}> — <@${interaction.user.id}> needs guidance on the Middleman process.`
         );
       }
+    }
+  });
+
+  collector.on("end", () => {
+    // Clean up user keys for this panel
+    for (const key of handledUsers) {
+      if (key.startsWith(sent.id)) handledUsers.delete(key);
     }
   });
 }
