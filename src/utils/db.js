@@ -23,10 +23,19 @@ const permissionSchema = new mongoose.Schema({
   deniedRoles: [String],
 });
 
+// Distributed message lock — TTL index auto-deletes docs after 30 seconds.
+// Unique index on messageId means only ONE bot instance can insert a given ID;
+// the second insert fails with a duplicate-key error and that instance skips it.
+const processedMessageSchema = new mongoose.Schema({
+  messageId: { type: String, required: true, unique: true },
+  createdAt: { type: Date, default: Date.now, expires: 30 },
+});
+
 export const Config = mongoose.model("Config", configSchema);
 export const Vouch = mongoose.model("Vouch", vouchSchema);
 export const Flop = mongoose.model("Flop", flopSchema);
 export const Permission = mongoose.model("Permission", permissionSchema);
+export const ProcessedMessage = mongoose.model("ProcessedMessage", processedMessageSchema);
 
 export async function getConfig(key, defaultValue = "") {
   let doc = await Config.findOne({ key });
@@ -38,6 +47,24 @@ export async function getConfig(key, defaultValue = "") {
 
 export async function setConfig(key, value) {
   await Config.findOneAndUpdate({ key }, { value }, { upsert: true });
+}
+
+/**
+ * Atomically claim a message ID for processing.
+ * Returns true  → this instance won the race, go ahead and handle it.
+ * Returns false → another instance already claimed it, skip.
+ */
+export async function claimMessage(messageId) {
+  try {
+    await ProcessedMessage.create({ messageId });
+    return true;
+  } catch (err) {
+    // Duplicate key error (code 11000) = another instance got there first
+    if (err.code === 11000) return false;
+    // Any other DB error — fail safe by allowing processing (don't silently drop commands)
+    console.error("claimMessage error:", err.message);
+    return true;
+  }
 }
 
 export async function connectDB() {
