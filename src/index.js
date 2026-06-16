@@ -1,9 +1,9 @@
 import { Client, GatewayIntentBits, Partials } from "discord.js";
-import { connectDB, Permission } from "./utils/db.js";
+import { connectDB, Permission, claimMessage } from "./utils/db.js";
 
 import * as settitle from "./commands/settitle.js";
 import * as setbanner from "./commands/setbanner.js";
-import * as setbannerremove from "./commands/bannerremove.js";
+import * as bannerremove from "./commands/bannerremove.js";
 import * as staffrole from "./commands/staffrole.js";
 import * as close from "./commands/close.js";
 import * as mminfo from "./commands/mminfo.js";
@@ -28,7 +28,7 @@ const PREFIX = ".";
 const commands = new Map([
   ["settitle", settitle],
   ["setbanner", setbanner],
-  ["bannerremove", setbannerremove],
+  ["bannerremove", bannerremove],
   ["staffrole", staffrole],
   ["close", close],
   ["mminfo", mminfo],
@@ -48,9 +48,6 @@ const commands = new Map([
   ["setfloptext", setfloptext],
   ["flopstats", flopstats],
 ]);
-
-// Prevent the same message from being processed twice (network retries / double events)
-const handledMessages = new Set();
 
 async function checkPermissions(member, commandName) {
   const record = await Permission.findOne({ commandName });
@@ -93,11 +90,10 @@ async function main() {
     if (!message.content.startsWith(PREFIX)) return;
     if (!message.guild) return;
 
-    // Deduplicate — same message ID must never be processed twice
-    if (handledMessages.has(message.id)) return;
-    handledMessages.add(message.id);
-    // Clean up old IDs after 10 seconds to prevent unbounded growth
-    setTimeout(() => handledMessages.delete(message.id), 10_000);
+    // Distributed lock via MongoDB — if another instance (e.g. Railway) already
+    // claimed this message ID, this instance skips it entirely. Auto-expires in 30s.
+    const claimed = await claimMessage(message.id);
+    if (!claimed) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
     const commandName = args.shift().toLowerCase();
