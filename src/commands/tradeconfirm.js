@@ -30,23 +30,36 @@ export async function run(message) {
   const sent = await message.channel.send({ embeds: [confirmEmbed], components: [row] });
 
   const confirmedUsers = new Set();
-  const deniedUsers = new Set();
+  const respondedUsers = new Set(); // each user may only respond once
+  let finished = false;
   const MAX_TRADERS = 2;
 
   const collector = sent.createMessageComponentCollector({ time: 600_000 });
 
   collector.on("collect", async (interaction) => {
+    if (finished) {
+      await interaction.reply({ content: "This confirmation panel is already closed.", ephemeral: true });
+      return;
+    }
+
+    // Each user may only press one button once
+    if (respondedUsers.has(interaction.user.id)) {
+      await interaction.reply({ content: "You have already responded to this trade confirmation.", ephemeral: true });
+      return;
+    }
+    respondedUsers.add(interaction.user.id);
+
     await interaction.deferUpdate();
 
     if (interaction.customId === "trade_confirm") {
       confirmedUsers.add(interaction.user.id);
-      deniedUsers.delete(interaction.user.id);
       await interaction.followUp({
         content: `✅ <@${interaction.user.id}> has confirmed the trade. (${confirmedUsers.size}/${MAX_TRADERS} confirmations)`,
-        ephemeral: false,
       });
 
       if (confirmedUsers.size >= MAX_TRADERS) {
+        finished = true;
+        collector.stop();
         const clearedEmbed = new EmbedBuilder()
           .setColor(0x57f287)
           .setTitle("Trade Confirmed — Both Parties Agreed")
@@ -59,10 +72,10 @@ export async function run(message) {
         );
         await sent.edit({ components: [disabledRow] });
         await sent.channel.send({ embeds: [clearedEmbed] });
-        collector.stop();
       }
     } else {
-      deniedUsers.add(interaction.user.id);
+      finished = true;
+      collector.stop();
       const deniedEmbed = new EmbedBuilder()
         .setColor(0xed4245)
         .setTitle("Trade Denied")
@@ -75,7 +88,6 @@ export async function run(message) {
       );
       await sent.edit({ components: [disabledRow] });
       await sent.channel.send({ embeds: [deniedEmbed] });
-      collector.stop();
     }
   });
 }
