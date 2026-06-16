@@ -31,18 +31,21 @@ export async function run(message) {
 
   const sent = await message.channel.send({ embeds: [feeEmbed], components: [row] });
 
+  // Lock so only the first button press ever counts
+  let locked = false;
+
   const collector = sent.createMessageComponentCollector({ time: 300_000 });
-  let used = false;
 
   collector.on("collect", async (interaction) => {
-    if (used) {
-      await interaction.reply({ content: "This option has already been selected.", ephemeral: true });
+    if (locked) {
+      await interaction.reply({ content: "This fee option has already been selected.", ephemeral: true });
       return;
     }
-    used = true;
+    locked = true;
+    collector.stop();
+
     await interaction.deferUpdate();
 
-    // Disable buttons
     const disabledRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("fee_split")
@@ -57,12 +60,16 @@ export async function run(message) {
     );
     await sent.edit({ components: [disabledRow] });
 
-    const label = interaction.customId === "fee_split" ? "split the Middleman Fee 50/50" : "cover the full 100% Middleman Fee";
+    const label = interaction.customId === "fee_split"
+      ? "split the Middleman Fee 50/50"
+      : "cover the full 100% Middleman Fee";
+
     const announcement = new EmbedBuilder()
       .setColor(0x57f287)
-      .setDescription(`<@${interaction.user.id}> have decided to **${label}**.\n\nThe MM will proceed accordingly. Please follow their instructions.`);
+      .setDescription(
+        `<@${interaction.user.id}> have decided to **${label}**.\n\nThe MM will proceed accordingly. Please follow their instructions.`
+      );
 
     await interaction.followUp({ embeds: [announcement] });
-    collector.stop();
   });
 }
