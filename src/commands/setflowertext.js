@@ -12,14 +12,6 @@ import { setConfig, getConfig } from "../utils/db.js";
 
 const sessionCache = new Map();
 
-function defaultSession() {
-  return {
-    embed1: { title: "Embed 1 Title", description: "Click **✏️ Embed 1** to set this text." },
-    embed2: { title: "Embed 2 Title", description: "Click **✏️ Embed 2** to set this text." },
-    embed3: { title: "Embed 3 Title", description: "Click **✏️ Embed 3** to set this text." },
-  };
-}
-
 function buildControlRow() {
   return [
     new ActionRowBuilder().addComponents(
@@ -37,8 +29,7 @@ function buildPreviewEmbeds(session) {
   return ["embed1", "embed2", "embed3"].map((key, i) =>
     new EmbedBuilder()
       .setColor(colors[i])
-      .setTitle(session[key].title || "(no title)")
-      .setDescription(session[key].description || "(no description)")
+      .setDescription(session[key].description || "(no description set)")
   );
 }
 
@@ -60,20 +51,16 @@ function buildFlowerButtons() {
 export async function run(message) {
   const guildId = message.guild.id;
 
-  // Pre-load saved values if they exist
-  const [e1t, e1d, e2t, e2d, e3t, e3d] = await Promise.all([
-    getConfig("flowers_embed1_title", "Embed 1 Title"),
+  const [e1d, e2d, e3d] = await Promise.all([
     getConfig("flowers_embed1_desc", "Click **✏️ Embed 1** to set this text."),
-    getConfig("flowers_embed2_title", "Embed 2 Title"),
     getConfig("flowers_embed2_desc", "Click **✏️ Embed 2** to set this text."),
-    getConfig("flowers_embed3_title", "Embed 3 Title"),
     getConfig("flowers_embed3_desc", "Click **✏️ Embed 3** to set this text."),
   ]);
 
   sessionCache.set(guildId, {
-    embed1: { title: e1t, description: e1d },
-    embed2: { title: e2t, description: e2d },
-    embed3: { title: e3t, description: e3d },
+    embed1: { description: e1d },
+    embed2: { description: e2d },
+    embed3: { description: e3d },
   });
 
   const session = sessionCache.get(guildId);
@@ -84,7 +71,7 @@ export async function run(message) {
     .setDescription(
       "> Configure your 3 embeds using the buttons below.\n" +
       "> The **live preview** above updates as you make changes.\n\n" +
-      "**✏️ Embed 1 / 2 / 3** — set title and description for each embed\n" +
+      "**✏️ Embed 1 / 2 / 3** — set the text for each embed\n" +
       "**✅ Save & Push** — saves to database and pushes the panel to this channel\n" +
       "**❌ Cancel** — discard changes\n\n" +
       "-# Only you can use these controls."
@@ -113,7 +100,7 @@ export async function run(message) {
       return;
     }
 
-    // ── Cancel ─────────────────────────────────────────────────────
+    // ── Cancel ──────────────────────────────────────────────────────
     if (interaction.customId === "fw_cancel") {
       sessionCache.delete(guildId);
       collector.stop("cancelled");
@@ -127,12 +114,9 @@ export async function run(message) {
       await interaction.deferUpdate();
 
       await Promise.all([
-        setConfig("flowers_embed1_title", session.embed1.title),
-        setConfig("flowers_embed1_desc",  session.embed1.description),
-        setConfig("flowers_embed2_title", session.embed2.title),
-        setConfig("flowers_embed2_desc",  session.embed2.description),
-        setConfig("flowers_embed3_title", session.embed3.title),
-        setConfig("flowers_embed3_desc",  session.embed3.description),
+        setConfig("flowers_embed1_desc", session.embed1.description),
+        setConfig("flowers_embed2_desc", session.embed2.description),
+        setConfig("flowers_embed3_desc", session.embed3.description),
       ]);
 
       sessionCache.delete(guildId);
@@ -148,7 +132,7 @@ export async function run(message) {
       return;
     }
 
-    // ── Embed editors (1 / 2 / 3) ──────────────────────────────────
+    // ── Embed editors (1 / 2 / 3) ───────────────────────────────────
     const embedMap = { fw_embed1: "embed1", fw_embed2: "embed2", fw_embed3: "embed3" };
     const embedKey = embedMap[interaction.customId];
     if (!embedKey) return;
@@ -162,20 +146,11 @@ export async function run(message) {
     modal.addComponents(
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
-          .setCustomId("title")
-          .setLabel("Title")
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-          .setPlaceholder(`Embed ${num} title`)
-          .setValue(session[embedKey].title)
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
           .setCustomId("description")
-          .setLabel("Description")
+          .setLabel(`Embed ${num} Text`)
           .setStyle(TextInputStyle.Paragraph)
           .setRequired(true)
-          .setPlaceholder(`Embed ${num} body text`)
+          .setPlaceholder(`Enter text for embed ${num}`)
           .setValue(session[embedKey].description)
       )
     );
@@ -189,7 +164,6 @@ export async function run(message) {
       });
       await resp.deferUpdate();
 
-      session[embedKey].title       = resp.fields.getTextInputValue("title").trim();
       session[embedKey].description = resp.fields.getTextInputValue("description").trim();
       sessionCache.set(guildId, session);
 
