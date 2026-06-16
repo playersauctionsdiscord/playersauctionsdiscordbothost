@@ -19,9 +19,10 @@ import * as list from "./commands/list.js";
 import * as config from "./commands/config.js";
 import * as permissions from "./commands/permissions.js";
 import * as vouchstats from "./commands/vouchstats.js";
-import * as flop from "./commands/flop.js";
-import * as setfloptext from "./commands/setfloptext.js";
-import * as flopstats from "./commands/flopstats.js";
+import * as flowers from "./commands/flowers.js";
+import * as setflowertext from "./commands/setflowertext.js";
+import * as flowerstats from "./commands/flowerstats.js";
+import * as values from "./commands/values.js";
 
 const PREFIX = ".";
 
@@ -44,9 +45,10 @@ const commands = new Map([
   ["config", config],
   ["permissions", permissions],
   ["vouchstats", vouchstats],
-  ["flop", flop],
-  ["setfloptext", setfloptext],
-  ["flopstats", flopstats],
+  ["flowers", flowers],
+  ["setflowertext", setflowertext],
+  ["flowerstats", flowerstats],
+  ["values", values],
 ]);
 
 async function checkPermissions(member, commandName) {
@@ -90,8 +92,6 @@ async function main() {
     if (!message.content.startsWith(PREFIX)) return;
     if (!message.guild) return;
 
-    // Distributed lock via MongoDB — if another instance (e.g. Railway) already
-    // claimed this message ID, this instance skips it entirely. Auto-expires in 30s.
     const claimed = await claimMessage(message.id);
     if (!claimed) return;
 
