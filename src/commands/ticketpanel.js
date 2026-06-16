@@ -8,9 +8,15 @@ import {
   EmbedBuilder,
   ChannelType,
   PermissionFlagsBits,
+  AttachmentBuilder,
 } from "discord.js";
 import { buildEmbed } from "../utils/embed.js";
 import { getConfig } from "../utils/db.js";
+
+// Prevent the same user from opening two tickets simultaneously
+const openingTicket = new Set();
+// Prevent the same interaction from being handled twice
+const handledInteractions = new Set();
 
 export async function run(message) {
   const requestEmbed = await buildEmbed({
@@ -36,56 +42,82 @@ export async function run(message) {
 
   const sent = await message.channel.send({ embeds: [requestEmbed], components: [row] });
 
-  const collector = sent.createMessageComponentCollector({ time: 0 }); // persistent
+  const collector = sent.createMessageComponentCollector();
 
   collector.on("collect", async (interaction) => {
     if (interaction.customId !== "ticket_request_mm") return;
 
-    const modal = new ModalBuilder()
-      .setCustomId("mm_request_modal")
-      .setTitle("Middleman Request");
+    // Deduplicate interaction — same interaction ID must never fire twice
+    if (handledInteractions.has(interaction.id)) return;
+    handledInteractions.add(interaction.id);
+    setTimeout(() => handledInteractions.delete(interaction.id), 30_000);
 
-    const otherPartyInput = new TextInputBuilder()
-      .setCustomId("other_party")
-      .setLabel("Other Trader's User ID")
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder("Enter their Discord user ID")
-      .setRequired(true);
-
-    const tradeDetailsInput = new TextInputBuilder()
-      .setCustomId("trade_details")
-      .setLabel("Trade Details")
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder("Describe what is being traded")
-      .setRequired(true);
-
-    const joinLinkInput = new TextInputBuilder()
-      .setCustomId("can_join_links")
-      .setLabel("Can you join via links?")
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder("Yes / No")
-      .setRequired(true);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(otherPartyInput),
-      new ActionRowBuilder().addComponents(tradeDetailsInput),
-      new ActionRowBuilder().addComponents(joinLinkInput)
-    );
-
-    await interaction.showModal(modal);
+    // Prevent the same user from opening two tickets at once
+    if (openingTicket.has(interaction.user.id)) {
+      await interaction.reply({
+        content: "⏳ Your previous ticket request is still being processed. Please wait.",
+        ephemeral: true,
+      });
+      return;
+    }
+    openingTicket.add(interaction.user.id);
 
     try {
-      const resp = await interaction.awaitModalSubmit({ time: 300_000 });
+      const modal = new ModalBuilder()
+        .setCustomId(`mm_request_modal_${interaction.id}`)
+        .setTitle("Middleman Request");
+
+      const otherPartyInput = new TextInputBuilder()
+        .setCustomId("other_party")
+        .setLabel("Other Trader's User ID")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder("Enter their Discord user ID")
+        .setRequired(true);
+
+      const tradeDetailsInput = new TextInputBuilder()
+        .setCustomId("trade_details")
+        .setLabel("Trade Details")
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder("Describe what is being traded")
+        .setRequired(true);
+
+      const joinLinkInput = new TextInputBuilder()
+        .setCustomId("can_join_links")
+        .setLabel("Can you join via links?")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder("Yes / No")
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(otherPartyInput),
+        new ActionRowBuilder().addComponents(tradeDetailsInput),
+        new ActionRowBuilder().addComponents(joinLinkInput)
+      );
+
+      await interaction.showModal(modal);
+
+      const resp = await interaction.awaitModalSubmit({
+        filter: (i) => i.user.id === interaction.user.id,
+        time: 300_000,
+      });
 
       const otherParty = resp.fields.getTextInputValue("other_party");
       const tradeDetails = resp.fields.getTextInputValue("trade_details");
       const canJoinLinks = resp.fields.getTextInputValue("can_join_links");
 
+      // Acknowledge modal immediately to prevent timeout
+      await resp.deferReply({ ephemeral: true });
+
       const staffRoleId = await getConfig("staff_role_id", "");
       const guild = message.guild;
 
+      const safeName = `mm-${interaction.user.username}`
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "")
+        .slice(0, 100);
+
       const ticketChannel = await guild.channels.create({
-        name: `mm-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 100),
+        name: safeName,
         type: ChannelType.GuildText,
         permissionOverwrites: [
           { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
@@ -133,21 +165,23 @@ export async function run(message) {
         components: [ticketRow],
       });
 
-      await resp.reply({
+      await resp.editReply({
         content: `✅ Your ticket has been created in <#${ticketChannel.id}>!`,
-        ephemeral: true,
       });
 
-      // Handle ticket buttons
-      const ticketCollector = ticketMsg.createMessageComponentCollector({ time: 0 });
+      // Track which button interactions in this ticket have been handled
+      const handledTicketBtns = new Set();
+
+      const ticketCollector = ticketMsg.createMessageComponentCollector();
 
       ticketCollector.on("collect", async (btnInt) => {
-        const [action] = btnInt.customId.split("_ticket_").concat(btnInt.customId.split("_user_")).concat(btnInt.customId.split("_ticket_"));
+        if (handledTicketBtns.has(btnInt.id)) return;
+        handledTicketBtns.add(btnInt.id);
+        setTimeout(() => handledTicketBtns.delete(btnInt.id), 30_000);
 
         if (btnInt.customId.startsWith("claim_ticket_")) {
           await btnInt.deferUpdate();
 
-          // Lock channel: only claimer + senior staff
           await ticketChannel.permissionOverwrites.set([
             { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
             {
@@ -183,7 +217,7 @@ export async function run(message) {
 
         } else if (btnInt.customId.startsWith("add_user_")) {
           const addModal = new ModalBuilder()
-            .setCustomId("add_user_modal")
+            .setCustomId(`add_user_modal_${btnInt.id}`)
             .setTitle("Add User to Ticket");
 
           const userIdInput = new TextInputBuilder()
@@ -197,12 +231,16 @@ export async function run(message) {
           await btnInt.showModal(addModal);
 
           try {
-            const addResp = await btnInt.awaitModalSubmit({ time: 60_000 });
+            const addResp = await btnInt.awaitModalSubmit({
+              filter: (i) => i.user.id === btnInt.user.id,
+              time: 60_000,
+            });
             const userId = addResp.fields.getTextInputValue("user_id").trim();
+            await addResp.deferReply({ ephemeral: true });
 
             const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
             if (!member) {
-              await addResp.reply({ content: "❌ Could not find that user.", ephemeral: true });
+              await addResp.editReply({ content: "❌ Could not find that user." });
               return;
             }
 
@@ -211,20 +249,20 @@ export async function run(message) {
               SendMessages: true,
             });
 
-            await addResp.reply({ content: `✅ Added <@${member.id}> to the ticket.`, ephemeral: true });
+            await addResp.editReply({ content: `✅ Added <@${member.id}> to the ticket.` });
           } catch (_) {}
 
         } else if (btnInt.customId.startsWith("delete_ticket_")) {
           await btnInt.deferUpdate();
+          ticketCollector.stop();
 
-          // Compile transcript
           let allMessages = [];
           let lastId;
           while (true) {
             const opts = { limit: 100 };
             if (lastId) opts.before = lastId;
-            const fetched = await ticketChannel.messages.fetch(opts);
-            if (fetched.size === 0) break;
+            const fetched = await ticketChannel.messages.fetch(opts).catch(() => null);
+            if (!fetched || fetched.size === 0) break;
             allMessages = allMessages.concat([...fetched.values()]);
             lastId = fetched.last()?.id;
             if (fetched.size < 100) break;
@@ -237,7 +275,6 @@ export async function run(message) {
             return `[${ts}] ${m.author.tag}: ${content}`;
           });
 
-          const { AttachmentBuilder } = await import("discord.js");
           const buffer = Buffer.from(lines.join("\n"), "utf-8");
           const attachment = new AttachmentBuilder(buffer, {
             name: `transcript-${ticketChannel.name}-${Date.now()}.txt`,
@@ -252,16 +289,20 @@ export async function run(message) {
                 description: `> Channel: **#${ticketChannel.name}**\n> Closed by: <@${btnInt.user.id}>\n> Messages: **${allMessages.length}**`,
                 color: 0xed4245,
               });
-              await logChannel.send({ embeds: [logEmbed], files: [attachment] });
+              await logChannel.send({ embeds: [logEmbed], files: [attachment] }).catch(() => {});
             }
           }
 
-          ticketCollector.stop();
-          await ticketChannel.delete("Ticket deleted");
+          await ticketChannel.delete("Ticket deleted").catch(() => {});
         }
       });
     } catch (err) {
-      console.error("MM modal error:", err.message);
+      if (!err.message?.includes("time")) {
+        console.error("Ticket panel error:", err.message);
+      }
+    } finally {
+      // Always release the lock so user can open a new ticket later
+      openingTicket.delete(interaction.user.id);
     }
   });
 }
