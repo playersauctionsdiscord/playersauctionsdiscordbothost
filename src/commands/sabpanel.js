@@ -40,6 +40,7 @@ export async function run(message) {
       BASES.map((b) => `\`${b.label}\` — ${b.description}`).join("\n") +
       `\n\n-# Collateral may be required • pricing is negotiable.`,
     color: 0x5865f2,
+    showBanner: true,
   });
 
   const select = new StringSelectMenuBuilder()
