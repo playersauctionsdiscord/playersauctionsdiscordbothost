@@ -1,131 +1,111 @@
+import {
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+  EmbedBuilder,
+  MessageFlags,
+} from "discord.js";
 import { buildEmbed } from "../utils/embed.js";
 
+const LINK = "<:linkicon:1516320108211863615>";
+
 const COMMANDS = {
-  settitle: {
-    syntax: ".settitle <Text>",
-    description: "Overwrites the global server title used in all embeds.",
-    permissions: "Server administrators only.",
-  },
-  setbanner: {
-    syntax: ".setbanner <URL>",
-    description: "Sets the global banner image displayed across all embeds. Must end in .png, .jpg, .jpeg, or .gif.",
-    permissions: "Server administrators only.",
-  },
-  staffrole: {
-    syntax: ".staffrole <@role>",
-    description: "Designates a role as the official staff group, pinged in all new ticket channels.",
-    permissions: "Server administrators only.",
-  },
-  close: {
-    syntax: ".close",
-    description: "Compiles a transcript of the ticket channel, sends it to the logs channel, and deletes the channel.",
-    permissions: "Staff only.",
-  },
-  mminfo: {
-    syntax: ".mminfo",
-    description: "Deploys a public educational embed explaining how Middleman transactions work, with Yes/No confirmation buttons.",
-    permissions: "All users.",
-  },
-  fee: {
-    syntax: ".fee",
-    description: "Prompts traders to select how the MM service fee is paid — 50/50 split or 100% by one party.",
-    permissions: "Staff only (inside ticket).",
-  },
-  tradeconfirm: {
-    syntax: ".tradeconfirm",
-    description: "Creates a trade confirmation checkpoint requiring both traders to confirm before the MM proceeds.",
-    permissions: "Staff only (inside ticket).",
-  },
-  w: {
-    syntax: ".w <@user>",
-    description: "Returns a detailed profile overview: user ID, account creation date, server join date, roles, and key permissions.",
-    permissions: "Staff only.",
-  },
-  roblox: {
-    syntax: ".roblox <username>",
-    description: "Fetches a Roblox user profile including ID, creation date, and account status (Active/Banned).",
-    permissions: "All users.",
-  },
-  sabpanel: {
-    syntax: ".sabpanel",
-    description: "Deploys an interactive indexing service panel with a dropdown for 14 base mutations. Selection triggers a modal for trade details and opens a private ticket.",
-    permissions: "Staff only.",
-  },
-  ticketsetup: {
-    syntax: ".ticketsetup",
-    description: "Launches an interactive embed builder panel for configuring ticket panels with title, description, color, image, webhook, and button settings.",
-    permissions: "Developers and server owners only.",
-  },
-  help: {
-    syntax: ".help <command/feature>",
-    description: "Returns syntax, permissions, and a description for a given command or feature.",
-    permissions: "All users.",
-  },
-  list: {
-    syntax: ".list <commands/features>",
-    description: "Returns a formatted index of all registered commands or active features.",
-    permissions: "All users.",
-  },
-  config: {
-    syntax: ".config",
-    description: "Opens an administrative dashboard to toggle modules, update log channels, and manage global settings.",
-    permissions: "Developers and server owners only.",
-  },
-  permissions: {
-    syntax: ".permissions",
-    description: "Opens the bot's role-access mapping interface to whitelist or blacklist roles from commands.",
-    permissions: "Developers and server owners only.",
-  },
-  vouchstats: {
-    syntax: ".vouchstats <@user>",
-    description: "Returns a reputation profile showing vouch count, completed deals, and server uptime.",
-    permissions: "All users.",
-  },
-  flop: {
-    syntax: ".flop",
-    description: "Outputs the active system announcement text to the current channel.",
-    permissions: "All users.",
-  },
-  setfloptext: {
-    syntax: ".setfloptext <text>",
-    description: "Sets the text displayed by the .flop command.",
-    permissions: "Staff only.",
-  },
-  flopstats: {
-    syntax: ".flopstats",
-    description: "Displays usage frequency and metrics for the .flop command.",
-    permissions: "All users.",
-  },
+  settitle:      { syntax: ".settitle <text>",      desc: "Overwrites the global server title used in all embeds.", perms: "Admins only." },
+  setbanner:     { syntax: ".setbanner <url>",      desc: "Sets the global banner image (must end in .png/.jpg/.gif).", perms: "Admins only." },
+  bannerremove:  { syntax: ".bannerremove",          desc: "Removes the global banner image.", perms: "Admins only." },
+  staffrole:     { syntax: ".staffrole <@role>",    desc: "Designates a role as staff — pinged in all new ticket channels.", perms: "Admins only." },
+  close:         { syntax: ".close",                 desc: "Saves a transcript and deletes the ticket channel.", perms: "Staff only." },
+  mminfo:        { syntax: ".mminfo",                desc: "Posts the Middleman info panel with Yes/No understanding buttons.", perms: "All users." },
+  fee:           { syntax: ".fee",                   desc: "Prompts traders to select how the MM fee is paid (50/50 or 100%).", perms: "Staff only (inside ticket)." },
+  tradeconfirm:  { syntax: ".tradeconfirm",          desc: "Creates a trade confirmation checkpoint for both traders.", perms: "Staff only (inside ticket)." },
+  w:             { syntax: ".w [@user]",             desc: "Shows Discord profile info. No @ = your own info.", perms: "Staff only." },
+  roblox:        { syntax: ".roblox <username>",    desc: "Fetches a Roblox profile (ID, created date, status).", perms: "All users." },
+  sabpanel:      { syntax: ".sabpanel",              desc: "Deploys the indexing service panel with base-mutation dropdown.", perms: "Staff only." },
+  ticketsetup:   { syntax: ".ticketsetup",           desc: "Interactive embed builder for ticket panels.", perms: "Devs / owners only." },
+  ticketpanel:   { syntax: ".ticketpanel",           desc: "Deploys the Middleman request panel.", perms: "Admins only." },
+  help:          { syntax: ".help [command]",        desc: "Shows info about a command. No arg = this panel.", perms: "All users." },
+  list:          { syntax: ".list <commands|features>", desc: "Lists all registered commands or features.", perms: "All users." },
+  config:        { syntax: ".config",                desc: "Admin dashboard to toggle modules and manage settings.", perms: "Devs / owners only." },
+  permissions:   { syntax: ".permissions",           desc: "Manage which roles can or cannot use each command.", perms: "Devs / owners only." },
+  vouchstats:    { syntax: ".vouchstats [@user]",   desc: "Shows vouch count and deals completed. No @ = your own stats.", perms: "All users." },
+  flowers:       { syntax: ".flowers",               desc: "Posts the flowers panel (3 embeds + Join/Deny buttons). Ticket only.", perms: "Staff only." },
+  setflowertext: { syntax: ".setflowertext",         desc: "Interactive builder to configure the 3 flower panel embeds.", perms: "Admins only." },
+  flowerstats:   { syntax: ".flowerstats",           desc: "Shows how many times .flowers has been used.", perms: "All users." },
+  values:        { syntax: ".values <item name>",   desc: "Searches Rolimons and game value sites for a Roblox item's worth.", perms: "All users." },
 };
 
 export async function run(message, args) {
   const query = args[0]?.toLowerCase();
 
-  if (!query) {
+  // .help <command> — direct lookup, reply with details
+  if (query && COMMANDS[query]) {
+    const cmd = COMMANDS[query];
     const embed = await buildEmbed({
-      title: "Help — Command List",
+      title: `Help — .${query}`,
       description:
-        `> Use \`.help <command>\` to get details on a specific command.\n\n` +
-        Object.keys(COMMANDS).map((k) => `\`${k}\``).join(" • "),
+        `**Syntax:** \`${cmd.syntax}\`\n\n` +
+        `**Description:**\n> ${cmd.desc}\n\n` +
+        `**Permissions:** ${cmd.perms}`,
       color: 0x5865f2,
-      footer: ".help <command> — for detailed info",
     });
     return message.reply({ embeds: [embed] });
   }
 
-  const cmd = COMMANDS[query];
-  if (!cmd) {
-    return message.reply(`❌ No command or feature found for \`${query}\`. Use \`.list commands\` to see all available commands.`);
+  if (query && !COMMANDS[query]) {
+    return message.reply(`❌ No command found for \`${query}\`. Use \`.list commands\` to see everything.`);
   }
 
-  const embed = await buildEmbed({
-    title: `Help — .${query}`,
-    description:
-      `**Syntax:** \`${cmd.syntax}\`\n\n` +
-      `**Description:**\n> ${cmd.description}\n\n` +
-      `**Permissions:** ${cmd.permissions}`,
-    color: 0x5865f2,
+  // No args — send the panel with dropdown
+  const headerEmbed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setDescription(
+      `> \`.help <command>\` — Shows information about a command\n` +
+      `> \`.help <feature>\` — Shows information about a feature\n\n` +
+      `> \`.list commands\` — Lists all commands\n` +
+      `> \`.list features\` — Lists all features\n\n` +
+      `> \`.config\` — Configures <@678344927997853742>\n` +
+      `> \`.permissions\` — Configures permissions\n\n` +
+      `## ${LINK}  **select from the drop down.**`
+    );
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId("help_select")
+    .setPlaceholder(`${LINK.replace(/<|>/g, "")} Select a command for details...`)
+    .addOptions(
+      Object.entries(COMMANDS).map(([name, cmd]) =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(`.${name}`)
+          .setValue(name)
+          .setDescription(cmd.desc.slice(0, 100))
+      )
+    );
+
+  const row = new ActionRowBuilder().addComponents(select);
+  const sent = await message.reply({ embeds: [headerEmbed], components: [row] });
+
+  const collector = sent.createMessageComponentCollector({
+    filter: (i) => i.user.id === message.author.id,
+    time: 300_000,
   });
 
-  return message.reply({ embeds: [embed] });
+  collector.on("collect", async (interaction) => {
+    const name = interaction.values[0];
+    const cmd = COMMANDS[name];
+    if (!cmd) return;
+
+    const detail = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setTitle(`${LINK} .${name}`)
+      .setDescription(
+        `**Syntax:** \`${cmd.syntax}\`\n\n` +
+        `**Description:**\n> ${cmd.desc}\n\n` +
+        `**Permissions:** ${cmd.perms}`
+      );
+
+    await interaction.reply({ embeds: [detail], flags: MessageFlags.Ephemeral });
+  });
+
+  collector.on("end", () => {
+    sent.edit({ components: [] }).catch(() => {});
+  });
 }
