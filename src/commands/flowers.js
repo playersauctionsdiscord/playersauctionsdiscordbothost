@@ -4,6 +4,13 @@ import { getConfig, Flop } from "../utils/db.js";
 const JOIN_ROLE_ID = "1481016917677445372";
 
 export async function run(message) {
+  // Only usable inside a ticket channel (mm- or sab- prefix)
+  const ch = message.channel;
+  const isTicket = ch.name?.startsWith("mm-") || ch.name?.startsWith("sab-");
+  if (!isTicket) {
+    return message.reply("❌ This command can only be used inside a ticket channel.");
+  }
+
   await Flop.findOneAndUpdate(
     { key: "flowers_text" },
     { $inc: { count: 1 } },
@@ -24,37 +31,35 @@ export async function run(message) {
 
   const buttons = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("fw_join")
+      .setCustomId(`fw_join_${message.id}`)
       .setLabel("💲 Join and be Rich")
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId("fw_deny")
+      .setCustomId(`fw_deny_${message.id}`)
       .setLabel("😭 Deny and Cry More")
       .setStyle(ButtonStyle.Danger)
   );
 
   const panel = await message.channel.send({ embeds, components: [buttons] });
 
-  const collector = panel.createMessageComponentCollector({ time: 0 }); // no timeout — permanent
+  const collector = panel.createMessageComponentCollector();
 
   collector.on("collect", async (interaction) => {
-    if (interaction.customId === "fw_join") {
+    if (interaction.customId === `fw_join_${message.id}`) {
       try {
         await interaction.member.roles.add(JOIN_ROLE_ID);
-        await interaction.reply({
-          content: `✅ <@${interaction.user.id}> has accepted the offer and has been granted access to all the necessary channels. Please check the staff channels for further information & vouch a Middleman.`,
-          ephemeral: true,
-        });
-      } catch (err) {
-        await interaction.reply({
-          content: "✅ You've joined! Please check the staff channels for further information.",
-          ephemeral: true,
-        });
-      }
-    } else if (interaction.customId === "fw_deny") {
+      } catch (_) {}
+
+      // Public non-ephemeral message in the ticket
       await interaction.reply({
-        content: "😭 You chose to pass. Feel free to come back any time!",
-        ephemeral: true,
+        content:
+          `<@${interaction.user.id}> has accepted the offer and has been granted access to all the necessary channels. Please check the staff channels for further information & vouch a Middleman.\n\n` +
+          `<:lock:1516402949499129936> : This ticket will close in **2 minutes** and a transcript will be saved.`,
+      });
+
+    } else if (interaction.customId === `fw_deny_${message.id}`) {
+      await interaction.reply({
+        content: `😭 <@${interaction.user.id}> denied the offer.`,
       });
     }
   });
