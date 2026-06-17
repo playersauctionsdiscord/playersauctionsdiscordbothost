@@ -63,7 +63,7 @@ export async function run(message, args) {
       `> \`.help <feature>\` — Shows information about a feature\n\n` +
       `> \`.list commands\` — Lists all commands\n` +
       `> \`.list features\` — Lists all features\n\n` +
-      `> \`.config\` — Configures <@678344927997853742>\n` +
+      `> \`.config\` — Configures <@1516382494377639976>\n` +
       `> \`.permissions\` — Configures permissions\n\n` +
       `## ${LINK}  **select from the drop down.**`
     );
