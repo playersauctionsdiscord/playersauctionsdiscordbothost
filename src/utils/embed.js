@@ -1,6 +1,12 @@
 import { EmbedBuilder } from "discord.js";
 import { getConfig } from "./db.js";
 
+/**
+ * Build a standard embed.
+ * Pass `showBanner: true` to attach the global banner image.
+ * Banner is intentionally OFF by default — only ticket answer embeds,
+ * mminfo panels, and sabpanel embeds should show it.
+ */
 export async function buildEmbed(options = {}) {
   const title = await getConfig("global_server_title", "PlayerAuctions Marketplace");
   const bannerUrl = await getConfig("global_banner_url", "");
@@ -15,7 +21,7 @@ export async function buildEmbed(options = {}) {
   if (options.thumbnail) embed.setThumbnail(options.thumbnail);
   if (options.author) embed.setAuthor(options.author);
 
-  if (bannerUrl && bannerUrl.trim() !== "") {
+  if (options.showBanner && bannerUrl && bannerUrl.trim() !== "") {
     embed.setImage(bannerUrl);
   }
 
