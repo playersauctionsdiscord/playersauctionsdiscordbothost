@@ -141,6 +141,7 @@ export async function run(message) {
           `Can Join Links: \`${canJoinLinks}\`\n\n` +
           `-# A middleman will be with you shortly.`,
         color: 0x5865f2,
+        showBanner: true,
       });
 
       const ticketRow = new ActionRowBuilder().addComponents(
