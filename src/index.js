@@ -23,6 +23,12 @@ import * as flowers from "./commands/flowers.js";
 import * as setflowertext from "./commands/setflowertext.js";
 import * as flowerstats from "./commands/flowerstats.js";
 import * as values from "./commands/values.js";
+import * as add from "./commands/add.js";
+import * as mute from "./commands/mute.js";
+import * as ban from "./commands/ban.js";
+import * as kick from "./commands/kick.js";
+import * as afk from "./commands/afk.js";
+import * as joke from "./commands/joke.js";
 
 const PREFIX = ".";
 
@@ -49,22 +55,24 @@ const commands = new Map([
   ["setflowertext", setflowertext],
   ["flowerstats", flowerstats],
   ["values", values],
+  ["add", add],
+  ["mute", mute],
+  ["ban", ban],
+  ["kick", kick],
+  ["afk", afk],
+  ["joke", joke],
 ]);
 
 async function checkPermissions(member, commandName) {
   const record = await Permission.findOne({ commandName });
   if (!record) return true;
-
   const memberRoleIds = [...member.roles.cache.keys()];
-
   if (record.deniedRoles.length > 0) {
     if (memberRoleIds.some((id) => record.deniedRoles.includes(id))) return false;
   }
-
   if (record.allowedRoles.length > 0) {
     return memberRoleIds.some((id) => record.allowedRoles.includes(id));
   }
-
   return true;
 }
 
@@ -89,8 +97,28 @@ async function main() {
 
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
-    if (!message.content.startsWith(PREFIX)) return;
     if (!message.guild) return;
+
+    // ── AFK mention check (runs before prefix check) ────────────────
+    if (message.mentions.users.size > 0) {
+      for (const [userId] of message.mentions.users) {
+        const afkData = afk.store?.get(userId);
+        if (afkData) {
+          const mins = Math.floor((Date.now() - afkData.since) / 60_000);
+          await message.reply(
+            `💤 <@${userId}> is AFK: **${afkData.reason}** — ${mins < 1 ? "just now" : `${mins}m ago`}`
+          ).catch(() => {});
+        }
+      }
+    }
+
+    // ── Remove AFK when the AFK user sends a message ────────────────
+    if (afk.store?.has(message.author.id) && !message.content.startsWith(PREFIX)) {
+      afk.store.delete(message.author.id);
+      await message.reply("✅ Welcome back! Your AFK has been removed.").catch(() => {});
+    }
+
+    if (!message.content.startsWith(PREFIX)) return;
 
     const claimed = await claimMessage(message.id);
     if (!claimed) return;
@@ -117,7 +145,6 @@ async function main() {
 
   const token = process.env.DISCORD_TOKEN;
   if (!token) throw new Error("DISCORD_TOKEN environment variable is not set");
-
   await client.login(token);
 }
 
