@@ -20,6 +20,7 @@ export async function run(message) {
       `## Example: One trader is giving $20 for a Garama\n` +
       `> The seller gives the MM the Garama on a private server. The MM holds it safely and confirms both sides are ready. The buyer sends $20 directly to the seller. Once payment is confirmed, the MM releases the Garama to the buyer.`,
     color: 0x5865f2,
+    showBanner: true,
   });
 
   const checkEmbed = await buildEmbed({
@@ -30,6 +31,7 @@ export async function run(message) {
       `If not, click **No** and let us know how we can assist you.\n\n` +
       `-# Your response helps us route the ticket correctly.`,
     color: 0x5865f2,
+    showBanner: true,
   });
 
   const row = new ActionRowBuilder().addComponents(
