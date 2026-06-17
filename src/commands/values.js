@@ -1,78 +1,88 @@
-import { buildEmbed } from "../utils/embed.js";
+import { EmbedBuilder } from "discord.js";
 
-const GAME_APIS = [
-  {
-    game: "Adopt Me",
-    url: (item) =>
-      `https://supremevalues.com/api/search?game=adoptme&query=${encodeURIComponent(item)}`,
-    emoji: "🐾",
-  },
-  {
-    game: "MM2",
-    url: (item) =>
-      `https://supremevalues.com/api/search?game=mm2&query=${encodeURIComponent(item)}`,
-    emoji: "🔪",
-  },
-  {
-    game: "Grow a Garden",
-    url: (item) =>
-      `https://supremevalues.com/api/search?game=growagardenroblox&query=${encodeURIComponent(item)}`,
-    emoji: "🌱",
-  },
-  {
-    game: "Steal a Brainrot",
-    url: (item) =>
-      `https://supremevalues.com/api/search?game=stealabrainrot&query=${encodeURIComponent(item)}`,
-    emoji: "🧠",
-  },
-];
+const DEMAND_LABELS = ["Unassigned", "Terrible", "Low", "Normal", "High", "Amazing"];
+const TREND_LABELS  = ["Lowering", "Stable", "Raising"];
 
-async function fetchSupremeValues(itemName) {
+let roliCache = null;
+let roliCacheTime = 0;
+const ROLI_TTL = 10 * 60 * 1000; // cache 10 minutes
+
+async function fetchRolimons() {
+  if (roliCache && Date.now() - roliCacheTime < ROLI_TTL) return roliCache;
+
+  const res = await fetch("https://www.rolimons.com/itemapi/itemdetails", {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; PlayerAuctionsBot/1.0)",
+      "Accept": "application/json",
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!res.ok) throw new Error(`Rolimons returned ${res.status}`);
+  const data = await res.json();
+  roliCache = data.items || {};
+  roliCacheTime = Date.now();
+  return roliCache;
+}
+
+function searchRolimons(items, query) {
+  const q = query.toLowerCase();
   const results = [];
 
-  for (const source of GAME_APIS) {
-    try {
-      const res = await fetch(source.url(itemName), {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; PlayerAuctionsBot/1.0)" },
-        signal: AbortSignal.timeout(5000),
-      });
-
-      if (!res.ok) continue;
-      const data = await res.json();
-
-      // Supreme Values typically returns an array of item objects
-      const items = Array.isArray(data) ? data : data?.items || data?.results || [];
-      if (!items.length) continue;
-
-      // Find the closest match
-      const match = items.find(
-        (i) => i.name?.toLowerCase().includes(itemName.toLowerCase())
-      ) || items[0];
-
-      if (!match) continue;
-
+  for (const [id, arr] of Object.entries(items)) {
+    const name = arr[0];
+    if (!name) continue;
+    if (name.toLowerCase().includes(q)) {
       results.push({
-        game: source.game,
-        emoji: source.emoji,
-        name: match.name || itemName,
-        robux: match.robux ?? match.value ?? match.rap ?? null,
-        usd: match.usd ?? match.price ?? null,
-        inGame: match.in_game ?? match.inGame ?? match.game_value ?? null,
-        demand: match.demand ?? null,
-        trend: match.trend ?? null,
+        id,
+        name,
+        rap:    arr[3] > 0 ? arr[3] : null,
+        value:  arr[4] > 0 ? arr[4] : null,
+        demand: arr[6] >= 0 ? arr[6] : null,
+        trend:  arr[7] >= 0 ? arr[7] : null,
+        rare:   arr[10] === 1,
+        hyped:  arr[9]  === 1,
       });
-    } catch {
-      // silently skip failed sources
     }
   }
 
-  return results;
+  // Sort: exact match first, then alphabetical
+  results.sort((a, b) => {
+    const aExact = a.name.toLowerCase() === q ? -1 : 0;
+    const bExact = b.name.toLowerCase() === q ? -1 : 0;
+    if (aExact !== bExact) return aExact - bExact;
+    return a.name.localeCompare(b.name);
+  });
+
+  return results.slice(0, 5);
 }
 
-function formatValue(val) {
-  if (val === null || val === undefined) return "`N/A`";
-  if (typeof val === "number") return `\`${val.toLocaleString()}\``;
-  return `\`${val}\``;
+function robuxToUsd(robux) {
+  if (!robux) return null;
+  // ~80 Robux per $1 (approximate market rate)
+  return (robux / 80).toFixed(2);
+}
+
+function buildItemEmbed(item, index, total) {
+  const lines = [];
+
+  if (item.value)  lines.push(`💎 **Value:** \`${item.value.toLocaleString()}\` Robux  (~$${robuxToUsd(item.value)})`);
+  if (item.rap)    lines.push(`📊 **RAP:** \`${item.rap.toLocaleString()}\` Robux  (~$${robuxToUsd(item.rap)})`);
+  if (item.demand !== null) lines.push(`📈 **Demand:** \`${DEMAND_LABELS[item.demand] ?? "Unknown"}\``);
+  if (item.trend  !== null) lines.push(`🔀 **Trend:** \`${TREND_LABELS[item.trend]   ?? "Unknown"}\``);
+
+  const tags = [];
+  if (item.rare)  tags.push("🔴 Rare");
+  if (item.hyped) tags.push("🔥 Hyped");
+  if (tags.length) lines.push(tags.join("  "));
+
+  lines.push(`\n🔗 [View on Rolimons](https://www.rolimons.com/item/${item.id})`);
+  lines.push(`-# Source: rolimons.com`);
+
+  return new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle(`🏷️ ${item.name}${total > 1 ? ` (${index + 1}/${total})` : ""}`)
+    .setDescription(lines.join("\n"));
 }
 
 export async function run(message, args) {
@@ -81,33 +91,44 @@ export async function run(message, args) {
   const itemName = args.join(" ");
   const searching = await message.reply(`🔍 Searching values for **${itemName}**...`);
 
-  const results = await fetchSupremeValues(itemName);
+  try {
+    const items = await fetchRolimons();
+    const results = searchRolimons(items, itemName);
 
-  if (!results.length) {
-    await searching.edit(
-      `❌ No values found for **${itemName}**.\nTry a more specific name or check [Supreme Values](https://supremevalues.com).`
-    );
-    return;
+    if (!results.length) {
+      await searching.edit({
+        content: "",
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xed4245)
+            .setTitle("❌ No Results Found")
+            .setDescription(
+              `No Roblox limited found matching **${itemName}**.\n\n` +
+              `> Make sure you're searching for a Roblox **catalog limited** (accessories, gear, etc.).\n` +
+              `> For in-game items (Adopt Me, MM2, etc.) check the game's own trading sites.\n\n` +
+              `-# Powered by [Rolimons](https://www.rolimons.com)`
+            ),
+        ],
+      });
+      return;
+    }
+
+    const embeds = results.map((item, i) => buildItemEmbed(item, i, results.length));
+
+    await searching.edit({ content: "", embeds });
+
+  } catch (err) {
+    await searching.edit({
+      content: "",
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xed4245)
+          .setTitle("❌ Lookup Failed")
+          .setDescription(
+            `Could not fetch item data right now.\n> ${err.message}\n\n` +
+            `-# Try again in a moment or visit [rolimons.com](https://www.rolimons.com) directly.`
+          ),
+      ],
+    });
   }
-
-  let description = `> Item values for **${itemName}** from Supreme Values\n\n`;
-
-  for (const r of results) {
-    description += `${r.emoji} **${r.game}** — ${r.name}\n`;
-    description += `> 💵 USD: ${formatValue(r.usd)}  |  🔷 Robux: ${formatValue(r.robux)}  |  🎮 In-Game: ${formatValue(r.inGame)}\n`;
-    if (r.demand) description += `> 📊 Demand: \`${r.demand}\``;
-    if (r.trend) description += `  |  📈 Trend: \`${r.trend}\``;
-    if (r.demand || r.trend) description += `\n`;
-    description += `\n`;
-  }
-
-  description += `-# Source: [supremevalues.com](https://supremevalues.com)`;
-
-  const embed = await buildEmbed({
-    title: "🏷️ Item Values",
-    description,
-    color: 0x5865f2,
-  });
-
-  await searching.edit({ content: "", embeds: [embed] });
 }
