@@ -7,7 +7,7 @@ import {
 } from "discord.js";
 import { buildEmbed } from "../utils/embed.js";
 
-const LINK = "<:linkicon:1516320108211863615>";
+const LINK = "<:linkicon:1516729713190502491>";
 
 const COMMANDS = {
   settitle:      { syntax: ".settitle <text>",      desc: "Overwrites the global server title used in all embeds.", perms: "Admins only." },
@@ -32,6 +32,12 @@ const COMMANDS = {
   setflowertext: { syntax: ".setflowertext",         desc: "Interactive builder to configure the 3 flower panel embeds.", perms: "Admins only." },
   flowerstats:   { syntax: ".flowerstats",           desc: "Shows how many times .flowers has been used.", perms: "All users." },
   values:        { syntax: ".values <item name>",   desc: "Searches Rolimons and game value sites for a Roblox item's worth.", perms: "All users." },
+  add:           { syntax: ".add <@user>",           desc: "Adds a user to the current ticket channel.", perms: "Staff only." },
+  mute:          { syntax: ".mute <@user> [mins] [reason]", desc: "Times out a user for a set number of minutes (default 10).", perms: "Staff only." },
+  ban:           { syntax: ".ban <@user> [reason]",  desc: "Permanently bans a user from the server.", perms: "Staff only." },
+  kick:          { syntax: ".kick <@user> [reason]", desc: "Kicks a user from the server.", perms: "Staff only." },
+  afk:           { syntax: ".afk [reason]",          desc: "Sets your AFK status. Bot notifies others who mention you.", perms: "All users." },
+  joke:          { syntax: ".joke",                  desc: "Sends a random safe joke.", perms: "All users." },
 };
 
 export async function run(message, args) {
