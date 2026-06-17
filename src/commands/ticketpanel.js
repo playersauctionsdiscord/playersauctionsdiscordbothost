@@ -31,6 +31,7 @@ export async function run(message) {
       `### Disclaimer\n` +
       `> We are NOT responsible for anything that occurs after the trade has been completed.`,
     color: 0x5865f2,
+    showBanner: true,
   });
 
   const row = new ActionRowBuilder().addComponents(
