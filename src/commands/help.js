@@ -70,7 +70,7 @@ export async function run(message, args) {
 
   const select = new StringSelectMenuBuilder()
     .setCustomId("help_select")
-    .setPlaceholder(`${LINK.replace(/<|>/g, "")} Select a command for details...`)
+    .setPlaceholder("Select a command for details...")
     .addOptions(
       Object.entries(COMMANDS).map(([name, cmd]) =>
         new StringSelectMenuOptionBuilder()
