@@ -146,6 +146,7 @@ export async function run(message) {
           `**Can Join Links:** \`${linkAccessibility}\`\n\n` +
           `-# An indexer will be with you shortly.`,
         color: 0x5865f2,
+        showBanner: true,
       });
 
       const pingContent = staffRoleId ? `<@&${staffRoleId}>` : "";
