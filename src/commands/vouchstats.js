@@ -2,25 +2,19 @@ import { buildEmbed } from "../utils/embed.js";
 import { Vouch } from "../utils/db.js";
 
 export async function run(message, args) {
+  // No args = show the command author's own stats
   const target =
     message.mentions.users.first() ||
-    (args[0] ? await message.client.users.fetch(args[0]).catch(() => null) : null);
-
-  if (!target) return message.reply("Usage: `.vouchstats <@user>`");
+    (args[0] ? await message.client.users.fetch(args[0]).catch(() => null) : null) ||
+    message.author;
 
   let record = await Vouch.findOne({ userId: target.id });
 
   if (!record) {
-    // First time — seed random starting numbers
-    const startVouches = Math.floor(Math.random() * 500) + 500; // 500–999
-    const startDeals = Math.floor(startVouches * (1.8 + Math.random() * 0.4)); // ~1.8–2.2× vouches
-    record = await Vouch.create({
-      userId: target.id,
-      vouches: startVouches,
-      deals: startDeals,
-    });
+    const startVouches = Math.floor(Math.random() * 500) + 500;
+    const startDeals   = Math.floor(startVouches * (1.8 + Math.random() * 0.4));
+    record = await Vouch.create({ userId: target.id, vouches: startVouches, deals: startDeals });
   } else {
-    // Every subsequent call — increment both by 1
     record = await Vouch.findOneAndUpdate(
       { userId: target.id },
       { $inc: { vouches: 1, deals: 1 } },
